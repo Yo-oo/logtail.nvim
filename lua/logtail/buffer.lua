@@ -4,13 +4,27 @@ local M = {}
 
 -- Create a scratch buffer for a stream
 function M.create_buf(title)
+	local name = "logtail://" .. title
+	-- Delete any orphaned buffer with the same name (e.g. after a restart).
+	local existing = vim.fn.bufnr(name)
+	if existing ~= -1 then
+		api.nvim_buf_delete(existing, { force = true })
+	end
 	local buf = api.nvim_create_buf(false, true)
-	api.nvim_buf_set_name(buf, "logtail://" .. title)
+	api.nvim_buf_set_name(buf, name)
 	vim.bo[buf].buftype = "nofile"
 	vim.bo[buf].bufhidden = "wipe"
 	vim.bo[buf].swapfile = false
 	vim.bo[buf].modifiable = false
 	return buf
+end
+
+-- Clear all lines in the buffer without stopping the stream
+function M.clear(buf)
+	if not api.nvim_buf_is_valid(buf) then return end
+	vim.bo[buf].modifiable = true
+	api.nvim_buf_set_lines(buf, 0, -1, false, {})
+	vim.bo[buf].modifiable = false
 end
 
 -- Set filetype after buf is attached to a window (treesitter needs a window)

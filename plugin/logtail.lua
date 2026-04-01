@@ -14,6 +14,15 @@ end, {
 	desc = "Stop a log stream by title",
 })
 
+-- :LogClear <title>
+vim.api.nvim_create_user_command("LogClear", function(args)
+	logtail.clear(args.args)
+end, {
+	nargs = 1,
+	complete = function() return logtail.list() end,
+	desc = "Clear log buffer contents (stream keeps running)",
+})
+
 -- :LogList
 vim.api.nvim_create_user_command("LogList", function()
 	local titles = logtail.list()

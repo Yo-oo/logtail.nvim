@@ -3,30 +3,20 @@ local config = require("logtail.config")
 
 local M = {}
 
--- streams[title] = { job_id, buf, win, timer }
+-- streams[title] = { job_id, buf, win, timer, opts }
 M.streams = {}
 
 local FLUSH_INTERVAL_MS = 80
 
-function M.start(opts)
-	local title      = opts.title or opts.cmd:sub(1, 40)
-	local layout     = vim.tbl_deep_extend("force", config.options.default_layout, opts.layout or {})
+-- Internal: start a job writing into an existing buf/win.
+-- Called by both start() and restart().
+local function start_job(title, buf, win, opts)
 	local max_lines  = opts.max_lines or config.options.max_lines
 	local trim_batch = config.options.trim_batch
-	local ft         = config.options.filetype
 	local autoscroll = config.options.autoscroll
-
-	if M.streams[title] then
-		M.stop(title)
-	end
-
-	local buf = buf_m.create_buf(title)
-	local win = buf_m.open_win(buf, title, layout)
-	buf_m.set_filetype(buf, ft)
 
 	local pending = {}
 
-	-- Flush pending lines into the buffer every FLUSH_INTERVAL_MS.
 	local timer = vim.loop.new_timer()
 	timer:start(FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, vim.schedule_wrap(function()
 		if not M.streams[title] or #pending == 0 then return end
@@ -40,17 +30,12 @@ function M.start(opts)
 		end
 	end))
 
-	-- vim.fn.jobstart calls on_stdout once per read() syscall with a table of
-	-- lines, reducing callback overhead from O(lines) to O(read_calls).
 	local job_id = vim.fn.jobstart({ "sh", "-c", opts.cmd }, {
 		stdout_buffered = false,
 		on_stdout = function(_, data)
 			for _, line in ipairs(data) do
-				if line ~= "" then
-					table.insert(pending, line)
-				end
+				if line ~= "" then table.insert(pending, line) end
 			end
-			-- Cap pending to avoid unbounded growth during initial burst.
 			if #pending > max_lines * 2 then
 				local keep = {}
 				for i = #pending - max_lines + 1, #pending do
@@ -61,9 +46,7 @@ function M.start(opts)
 		end,
 		on_stderr = function(_, data)
 			for _, line in ipairs(data) do
-				if line ~= "" then
-					table.insert(pending, line)
-				end
+				if line ~= "" then table.insert(pending, line) end
 			end
 		end,
 		on_exit = function(_, code)
@@ -80,20 +63,15 @@ function M.start(opts)
 		vim.notify("[logtail] failed to start: " .. opts.cmd, vim.log.levels.ERROR)
 		timer:stop()
 		timer:close()
-		return
+		return false
 	end
 
-	M.streams[title] = { job_id = job_id, buf = buf, win = win, timer = timer }
-
-	-- Auto-stop when the buffer is wiped (e.g. user closes the window with :q).
-	vim.api.nvim_create_autocmd("BufWipeout", {
-		buffer = buf,
-		once = true,
-		callback = function() M.stop(title) end,
-	})
+	M.streams[title] = { job_id = job_id, buf = buf, win = win, timer = timer, opts = opts }
+	return true
 end
 
-function M.stop(title)
+-- Internal: stop only the job and timer, leave buf/win untouched.
+local function stop_job(title)
 	local stream = M.streams[title]
 	if not stream then return end
 	if stream.timer then
@@ -104,6 +82,40 @@ function M.stop(title)
 		vim.fn.jobstop(stream.job_id)
 	end
 	M.streams[title] = nil
+end
+
+function M.start(opts)
+	local title  = opts.title or opts.cmd:sub(1, 40)
+	local layout = vim.tbl_deep_extend("force", config.options.default_layout, opts.layout or {})
+	local ft     = config.options.filetype
+
+	-- Stop any existing stream with the same title first.
+	if M.streams[title] then
+		stop_job(title)
+	end
+
+	local buf = buf_m.create_buf(title)
+	local win = buf_m.open_win(buf, title, layout)
+	buf_m.set_filetype(buf, ft)
+
+	if not start_job(title, buf, win, opts) then return end
+
+	-- Auto-stop when the buffer is wiped (e.g. user closes the window with :q).
+	vim.api.nvim_create_autocmd("BufWipeout", {
+		buffer = buf,
+		once = true,
+		callback = function() stop_job(title) end,
+	})
+end
+
+function M.stop(title)
+	stop_job(title)
+end
+
+function M.clear(title)
+	local stream = M.streams[title]
+	if not stream then return end
+	buf_m.clear(stream.buf)
 end
 
 function M.list()
@@ -117,7 +129,7 @@ end
 function M.stop_all()
 	local titles = M.list()
 	for _, title in ipairs(titles) do
-		M.stop(title)
+		stop_job(title)
 	end
 end
 

@@ -16,6 +16,11 @@ function M.stop(title)
 	stream.stop(title)
 end
 
+function M.clear(title)
+	stream.clear(title)
+end
+
+
 function M.list()
 	return stream.list()
 end
