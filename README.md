@@ -4,6 +4,10 @@ Stream any shell command's output into a Neovim buffer with syntax highlighting.
 
 Inspired by the log panel in [flutter-tools.nvim](https://github.com/nvim-flutter/flutter-tools.nvim).
 
+## Demo
+
+https://github.com/user-attachments/assets/7c1e95d1-919f-43ba-9dac-75a1461117d9
+
 ## Why
 
 Log viewers like k9s, stern, and Loki are great tools — but they live outside Neovim. logtail.nvim brings log output into a regular buffer, so you can use everything you already know: `/` search, `y` yank, syntax highlights, keymaps, and more.
