@@ -3,13 +3,12 @@ local config = require("logtail.config")
 
 local M = {}
 
--- streams[title] = { job_id, buf, win, timer, opts }
+-- streams[title] = { job_id, buf, win, timer }
 M.streams = {}
 
 local FLUSH_INTERVAL_MS = 80
 
 -- Internal: start a job writing into an existing buf/win.
--- Called by both start() and restart().
 local function start_job(title, buf, win, opts)
 	local max_lines  = opts.max_lines or config.options.max_lines
 	local trim_batch = config.options.trim_batch
@@ -17,7 +16,7 @@ local function start_job(title, buf, win, opts)
 
 	local pending = {}
 
-	local timer = vim.loop.new_timer()
+	local timer = vim.uv.new_timer()
 	timer:start(FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, vim.schedule_wrap(function()
 		if not M.streams[title] or #pending == 0 then return end
 
@@ -66,7 +65,7 @@ local function start_job(title, buf, win, opts)
 		return false
 	end
 
-	M.streams[title] = { job_id = job_id, buf = buf, win = win, timer = timer, opts = opts }
+	M.streams[title] = { job_id = job_id, buf = buf, win = win, timer = timer }
 	return true
 end
 
