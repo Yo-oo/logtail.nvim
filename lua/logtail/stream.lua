@@ -3,7 +3,7 @@ local config = require("logtail.config")
 
 local M = {}
 
--- streams[title] = { job_id, buf, win, paused, timer, pending }
+-- streams[title] = { job_id, buf, win, timer }
 M.streams = {}
 
 local FLUSH_INTERVAL_MS = 80
@@ -29,14 +29,13 @@ function M.start(opts)
 	-- Flush pending lines into the buffer every FLUSH_INTERVAL_MS.
 	local timer = vim.loop.new_timer()
 	timer:start(FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, vim.schedule_wrap(function()
-		local stream = M.streams[title]
-		if not stream or #pending == 0 then return end
+		if not M.streams[title] or #pending == 0 then return end
 
 		local lines = pending
 		pending = {}
 		buf_m.append(buf, lines, max_lines, trim_batch)
 
-		if autoscroll and not stream.paused then
+		if autoscroll then
 			buf_m.scroll_to_bottom(win)
 		end
 	end))
@@ -68,8 +67,7 @@ function M.start(opts)
 			end
 		end,
 		on_exit = function(_, code)
-			local stream = M.streams[title]
-			if not stream then return end
+			if not M.streams[title] then return end
 			if #pending > 0 then
 				buf_m.append(buf, pending, max_lines, trim_batch)
 				pending = {}
@@ -85,7 +83,7 @@ function M.start(opts)
 		return
 	end
 
-	M.streams[title] = { job_id = job_id, buf = buf, win = win, paused = false, timer = timer }
+	M.streams[title] = { job_id = job_id, buf = buf, win = win, timer = timer }
 
 	-- Auto-stop when the buffer is wiped (e.g. user closes the window with :q).
 	vim.api.nvim_create_autocmd("BufWipeout", {
@@ -106,29 +104,6 @@ function M.stop(title)
 		vim.fn.jobstop(stream.job_id)
 	end
 	M.streams[title] = nil
-end
-
-function M.pause(title)
-	local stream = M.streams[title]
-	if not stream then return end
-	stream.paused = true
-end
-
-function M.resume(title)
-	local stream = M.streams[title]
-	if not stream then return end
-	stream.paused = false
-	buf_m.force_scroll_to_bottom(stream.win)
-end
-
-function M.toggle(title)
-	local stream = M.streams[title]
-	if not stream then return end
-	if stream.paused then
-		M.resume(title)
-	else
-		M.pause(title)
-	end
 end
 
 function M.list()

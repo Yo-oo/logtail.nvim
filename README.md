@@ -40,27 +40,21 @@ logtail.start({
 })
 
 -- Control streams
-logtail.stop("mypod")          -- stop and clean up
-logtail.pause("mypod")         -- freeze autoscroll (stream keeps running)
-logtail.resume("mypod")        -- resume autoscroll and jump to bottom
-logtail.toggle("mypod")        -- pause / resume toggle
-logtail.stop_all()             -- stop all active streams
-
--- Query
-logtail.list()                 -- returns a list of active stream titles
+logtail.stop("mypod")   -- stop and clean up
+logtail.stop_all()      -- stop all active streams
+logtail.list()          -- returns a list of active stream titles
 ```
+
+Autoscroll is handled automatically: scrolling up pauses it, pressing `G` resumes it.
 
 ### Commands
 
-| Command              | Description             |
-| -------------------- | ----------------------- |
-| `:LogStart <cmd>`    | Start streaming `<cmd>` |
-| `:LogStop <title>`   | Stop a stream           |
-| `:LogPause <title>`  | Pause autoscroll        |
-| `:LogResume <title>` | Resume autoscroll       |
-| `:LogToggle <title>` | Toggle pause/resume     |
-| `:LogList`           | List active streams     |
-| `:LogStopAll`        | Stop all streams        |
+| Command           | Description                           |
+| ----------------- | ------------------------------------- |
+| `:LogStart <cmd>` | Start streaming `<cmd>`               |
+| `:LogStop <title>`| Stop a stream (Tab to complete title) |
+| `:LogList`        | List active streams                   |
+| `:LogStopAll`     | Stop all streams                      |
 
 ## Configuration
 
@@ -122,7 +116,6 @@ end, { desc = "Tail pod logs" })
 - **Autoscroll** follows the latest output by default.
 - Scroll up freely — autoscroll pauses automatically when your cursor moves away from the bottom.
 - Press `G` to jump back to the bottom and resume autoscroll.
-- Use `:LogPause` / `:LogToggle` to keep the stream running while reading without autoscroll.
 
 ## Notes on large initial output
 

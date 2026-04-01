@@ -16,18 +16,6 @@ function M.stop(title)
 	stream.stop(title)
 end
 
-function M.pause(title)
-	stream.pause(title)
-end
-
-function M.resume(title)
-	stream.resume(title)
-end
-
-function M.toggle(title)
-	stream.toggle(title)
-end
-
 function M.list()
 	return stream.list()
 end
