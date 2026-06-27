@@ -1,0 +1,139 @@
+*logtail.txt*                  Stream shell command output into a Neovim buffer
+
+==============================================================================
+CONTENTS                                                     *logtail-contents*
+
+  1. Introduction ......................... |logtail-introduction|
+  2. Requirements ......................... |logtail-requirements|
+  3. Setup ................................ |logtail-setup|
+  4. Configuration ........................ |logtail-configuration|
+  5. Lua API .............................. |logtail-api|
+  6. Commands ............................. |logtail-commands|
+  7. Scrolling ............................ |logtail-scrolling|
+  8. Health ............................... |logtail-health|
+
+==============================================================================
+1. INTRODUCTION                                          *logtail-introduction*
+
+logtail.nvim streams the output of any shell command into a regular Neovim
+buffer with syntax highlighting. Because the output lives in an ordinary
+buffer, you get search (`/`), yank (`y`), keymaps, and highlights for free.
+
+The command is run with `sh -c <cmd>`, so any shell pipeline works. Output is
+held in a per-stream ring buffer to bound memory.
+
+==============================================================================
+2. REQUIREMENTS                                          *logtail-requirements*
+
+- Neovim >= 0.10
+- A log syntax highlighter (the buffer filetype is `log` by default):
+    - tree-sitter-log (treesitter based), or
+    - vim-log-highlighting (regex based, no extra dependencies)
+
+==============================================================================
+3. SETUP                                                        *logtail-setup*
+
+Calling |logtail.setup()| is optional; defaults are applied automatically so
+|logtail.start()| works out of the box. >lua
+
+    require("logtail").setup({})
+<
+==============================================================================
+4. CONFIGURATION                                        *logtail-configuration*
+
+Defaults: >lua
+
+    require("logtail").setup({
+      default_layout = {
+        type = "current", -- "split"|"vsplit"|"tab"|"current"|"float"
+        size = 15,        -- lines for split/vsplit (ignored by float)
+        -- width  = 0.8,  -- float only: fraction of editor width
+        -- height = 0.8,  -- float only: fraction of editor height
+      },
+      max_lines  = 5000,  -- ring buffer size per stream
+      trim_batch = 500,   -- lines removed per trim cycle
+      filetype   = "log", -- buffer filetype
+      autoscroll = true,  -- follow latest output
+    })
+<
+                                                          *logtail-layout-size*
+For `type = "float"`, `size` is ignored. Use `width` and `height` (fractions
+of the editor size) instead. If `height` is omitted it falls back to
+`size / 100` for backward compatibility.
+
+`max_lines`, `trim_batch`, and `autoscroll` may be overridden per stream by
+passing them to |logtail.start()|.
+
+==============================================================================
+5. LUA API                                                        *logtail-api*
+
+logtail.setup({opts})                                       *logtail.setup()*
+    Merge {opts} over the defaults. Optional.
+
+logtail.start({opts})                                       *logtail.start()*
+    Start streaming a command. {opts} fields:
+        cmd        (string, required)  shell command, run via `sh -c`
+        title      (string)            stream/buffer name; defaults to the
+                                       first 40 chars of {cmd}
+        layout     (table)             overrides `default_layout`
+        max_lines  (number)            per-stream override
+        trim_batch (number)            per-stream override
+        autoscroll (boolean)           per-stream override
+
+    Starting a stream whose {title} already exists restarts it, reusing the
+    existing window instead of opening a new one.
+
+logtail.stop({title})                                        *logtail.stop()*
+    Stop the stream named {title} and clean up its job and timer.
+
+logtail.clear({title})                                      *logtail.clear()*
+    Clear the buffer contents of {title}; the stream keeps running.
+
+logtail.list()                                               *logtail.list()*
+    Return a list of active stream titles.
+
+logtail.stop_all()                                       *logtail.stop_all()*
+    Stop every active stream.
+
+==============================================================================
+6. COMMANDS                                                  *logtail-commands*
+
+                                                                   *:LogStart*
+:LogStart {cmd}
+:LogStart {title} -- {cmd}
+    Start streaming {cmd}. With a `--` separator, the text before it is used
+    as the stream title.
+
+                                                                    *:LogStop*
+:LogStop {title}
+    Stop the stream {title}. Completion offers active titles.
+
+                                                                   *:LogClear*
+:LogClear {title}
+    Clear the buffer of {title} without stopping the stream.
+
+                                                                    *:LogList*
+:LogList
+    List active streams.
+
+                                                                 *:LogStopAll*
+:LogStopAll
+    Stop all active streams.
+
+==============================================================================
+7. SCROLLING                                                *logtail-scrolling*
+
+When `autoscroll` is enabled the view follows the latest output. Autoscroll is
+based on the window viewport: if the bottom of the buffer scrolls out of view
+(more than 10 lines above the last line), autoscroll pauses so you can read
+freely. Press `G` to jump back to the bottom and resume following.
+
+==============================================================================
+8. HEALTH                                                      *logtail-health*
+
+Run `:checkhealth logtail` to verify:
+    - Neovim version (>= 0.10)
+    - `sh` is available in PATH
+    - the tree-sitter `log` parser is installed
+
+vim:tw=78:ts=8:ft=help:norl:

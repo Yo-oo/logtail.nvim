@@ -1,0 +1,37 @@
+local util = require("logtail.util")
+
+describe("util.process_chunk", function()
+	it("carries a partial line across chunks", function()
+		local lines, partial = util.process_chunk("", { "hello wor" })
+		assert.same({}, lines)
+		assert.equals("hello wor", partial)
+
+		lines, partial = util.process_chunk(partial, { "ld", "" })
+		assert.same({ "hello world" }, lines)
+		assert.equals("", partial)
+	end)
+
+	it("joins the leading element to the carried partial", function()
+		local lines, partial = util.process_chunk("foo", { "bar", "baz" })
+		assert.same({ "foobar" }, lines)
+		assert.equals("baz", partial)
+	end)
+
+	it("preserves genuinely empty lines between newlines", function()
+		local lines, partial = util.process_chunk("", { "a", "", "b" })
+		assert.same({ "a", "" }, lines)
+		assert.equals("b", partial)
+	end)
+
+	it("treats a trailing empty element as a clean newline", function()
+		local lines, partial = util.process_chunk("", { "a", "b", "" })
+		assert.same({ "a", "b" }, lines)
+		assert.equals("", partial)
+	end)
+
+	it("returns the partial unchanged for an empty chunk", function()
+		local lines, partial = util.process_chunk("xyz", {})
+		assert.same({}, lines)
+		assert.equals("xyz", partial)
+	end)
+end)

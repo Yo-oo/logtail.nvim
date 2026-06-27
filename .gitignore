@@ -1,1 +1,3 @@
 secrets/
+.tests/
+scratch-dev-init.lua

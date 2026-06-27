@@ -38,13 +38,18 @@ local logtail = require("logtail")
 
 -- Start streaming a command
 logtail.start({
-  cmd   = "kubectl logs -f mypod -n app --tail=5000",
-  title = "mypod",             -- buffer name (optional, defaults to first 40 chars of cmd)
-  layout = { type = "split" }, -- optional, overrides default_layout
+  cmd        = "kubectl logs -f mypod -n app --tail=5000",
+  title      = "mypod",             -- buffer name (optional, defaults to first 40 chars of cmd)
+  layout     = { type = "split" },  -- optional, overrides default_layout
+  -- Per-stream overrides (optional, fall back to setup() config):
+  max_lines  = 10000,
+  trim_batch = 1000,
+  autoscroll = true,
 })
 
 -- Control streams
 logtail.stop("mypod")   -- stop and clean up
+logtail.clear("mypod")  -- clear the buffer, keep streaming
 logtail.stop_all()      -- stop all active streams
 logtail.list()          -- returns a list of active stream titles
 ```
@@ -53,12 +58,14 @@ Autoscroll is handled automatically: scrolling up pauses it, pressing `G` resume
 
 ### Commands
 
-| Command           | Description                           |
-| ----------------- | ------------------------------------- |
-| `:LogStart <cmd>` | Start streaming `<cmd>`               |
-| `:LogStop <title>`| Stop a stream (Tab to complete title) |
-| `:LogList`        | List active streams                   |
-| `:LogStopAll`     | Stop all streams                      |
+| Command                     | Description                                       |
+| --------------------------- | ------------------------------------------------- |
+| `:LogStart <cmd>`           | Start streaming `<cmd>`                            |
+| `:LogStart <title> -- <cmd>`| Start with an explicit title                       |
+| `:LogStop <title>`          | Stop a stream (Tab to complete title)             |
+| `:LogClear <title>`         | Clear a buffer's contents (stream keeps running)  |
+| `:LogList`                  | List active streams                               |
+| `:LogStopAll`               | Stop all streams                                  |
 
 ## Configuration
 
@@ -66,7 +73,10 @@ Autoscroll is handled automatically: scrolling up pauses it, pressing `G` resume
 require("logtail").setup({
   default_layout = {
     type = "current",  -- "split" | "vsplit" | "tab" | "current" | "float"
-    size = 15,       -- lines for split/vsplit, percentage for float
+    size = 15,         -- lines for split/vsplit (ignored by float)
+    -- For type = "float", size is ignored; use editor fractions instead:
+    -- width  = 0.8,
+    -- height = 0.8,
   },
   max_lines  = 5000, -- ring buffer size per stream
   trim_batch = 500,  -- lines removed per trim cycle
@@ -74,6 +84,10 @@ require("logtail").setup({
   autoscroll = true,
 })
 ```
+
+`max_lines`, `trim_batch`, and `autoscroll` can also be overridden per stream via `logtail.start({ ... })`.
+
+Run `:checkhealth logtail` to verify your setup (Neovim version, `sh`, and the tree-sitter `log` parser).
 
 ## Picker integration
 
@@ -131,6 +145,11 @@ docker logs -f mycontainer --tail=5000
 ```
 
 Piping through `tail -n N` does **not** work for follow-mode commands — `tail` buffers until EOF, which a follow command never sends.
+
+## Contributing
+
+Bug reports and PRs are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the
+project layout, how to run the tests (`make test`), and manual testing tips.
 
 ## License
 
