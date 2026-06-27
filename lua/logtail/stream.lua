@@ -1,5 +1,6 @@
 local buf_m  = require("logtail.buffer")
 local config = require("logtail.config")
+local util   = require("logtail.util")
 
 local M = {}
 
@@ -11,10 +12,15 @@ local FLUSH_INTERVAL_MS = 80
 -- Internal: start a job writing into an existing buf/win.
 local function start_job(title, buf, win, opts)
 	local max_lines  = opts.max_lines or config.options.max_lines
-	local trim_batch = config.options.trim_batch
-	local autoscroll = config.options.autoscroll
+	local trim_batch = opts.trim_batch or config.options.trim_batch
+	local autoscroll = opts.autoscroll
+	if autoscroll == nil then
+		autoscroll = config.options.autoscroll
+	end
 
 	local pending = {}
+	local stdout_partial = ""
+	local stderr_partial = ""
 
 	local timer = vim.uv.new_timer()
 	timer:start(FLUSH_INTERVAL_MS, FLUSH_INTERVAL_MS, vim.schedule_wrap(function()
@@ -29,27 +35,36 @@ local function start_job(title, buf, win, opts)
 		end
 	end))
 
+	local function push(lines)
+		for _, line in ipairs(lines) do
+			pending[#pending + 1] = line
+		end
+		-- Bound `pending` between flushes so a burst can't blow up memory.
+		if #pending > max_lines * 2 then
+			local keep = {}
+			for i = #pending - max_lines + 1, #pending do
+				keep[#keep + 1] = pending[i]
+			end
+			pending = keep
+		end
+	end
+
 	local job_id = vim.fn.jobstart({ "sh", "-c", opts.cmd }, {
 		stdout_buffered = false,
 		on_stdout = function(_, data)
-			for _, line in ipairs(data) do
-				if line ~= "" then table.insert(pending, line) end
-			end
-			if #pending > max_lines * 2 then
-				local keep = {}
-				for i = #pending - max_lines + 1, #pending do
-					keep[#keep + 1] = pending[i]
-				end
-				pending = keep
-			end
+			local lines
+			lines, stdout_partial = util.process_chunk(stdout_partial, data)
+			push(lines)
 		end,
 		on_stderr = function(_, data)
-			for _, line in ipairs(data) do
-				if line ~= "" then table.insert(pending, line) end
-			end
+			local lines
+			lines, stderr_partial = util.process_chunk(stderr_partial, data)
+			push(lines)
 		end,
 		on_exit = function(_, code)
 			if not M.streams[title] then return end
+			if stdout_partial ~= "" then pending[#pending + 1] = stdout_partial end
+			if stderr_partial ~= "" then pending[#pending + 1] = stderr_partial end
 			if #pending > 0 then
 				buf_m.append(buf, pending, max_lines, trim_batch)
 				pending = {}
@@ -88,13 +103,25 @@ function M.start(opts)
 	local layout = vim.tbl_deep_extend("force", config.options.default_layout, opts.layout or {})
 	local ft     = config.options.filetype
 
-	-- Stop any existing stream with the same title first.
-	if M.streams[title] then
+	-- Reuse the existing window on restart instead of leaking a new one.
+	local existing = M.streams[title]
+	local reuse_win
+	if existing then
+		if existing.win and vim.api.nvim_win_is_valid(existing.win) then
+			reuse_win = existing.win
+		end
 		stop_job(title)
 	end
 
 	local buf = buf_m.create_buf(title)
-	local win = buf_m.open_win(buf, title, layout)
+	local win
+	if reuse_win then
+		vim.api.nvim_win_set_buf(reuse_win, buf)
+		buf_m.setup_win(reuse_win)
+		win = reuse_win
+	else
+		win = buf_m.open_win(buf, title, layout)
+	end
 	buf_m.set_filetype(buf, ft)
 
 	if not start_job(title, buf, win, opts) then return end

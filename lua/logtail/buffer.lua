@@ -33,7 +33,7 @@ function M.set_filetype(buf, ft)
 end
 
 -- Disable treesitter fold to prevent "invalid bot" errors on rapid buffer updates.
-local function setup_win(win)
+function M.setup_win(win)
 	vim.wo[win].foldenable = false
 	vim.wo[win].foldmethod = "manual"
 end
@@ -61,8 +61,12 @@ function M.open_win(buf, title, layout)
 		win = api.nvim_get_current_win()
 		api.nvim_win_set_buf(win, buf)
 	elseif t == "float" then
-		local width = math.floor(vim.o.columns * 0.8)
-		local height = math.floor(vim.o.lines * (size / 100))
+		-- Float ignores `size`; use width/height as editor fractions instead.
+		-- `size / 100` is kept as a height fallback for backward compatibility.
+		local wfrac = layout.width or 0.8
+		local hfrac = layout.height or (size / 100)
+		local width = math.floor(vim.o.columns * wfrac)
+		local height = math.floor(vim.o.lines * hfrac)
 		local row = math.floor((vim.o.lines - height) / 2)
 		local col = math.floor((vim.o.columns - width) / 2)
 		win = api.nvim_open_win(buf, true, {
@@ -83,7 +87,7 @@ function M.open_win(buf, title, layout)
 		api.nvim_win_set_buf(win, buf)
 	end
 
-	setup_win(win)
+	M.setup_win(win)
 	return win
 end
 
@@ -96,16 +100,20 @@ function M.append(buf, lines, max_lines, trim_batch)
 	vim.bo[buf].modifiable = true
 	api.nvim_buf_set_lines(buf, -1, -1, false, lines)
 
+	-- Hysteresis: only trim once we exceed max_lines by a full batch, but then
+	-- drop everything above max_lines so a large single append can't stay over.
 	local count = api.nvim_buf_line_count(buf)
 	if count > max_lines + trim_batch then
-		api.nvim_buf_set_lines(buf, 0, trim_batch, false, {})
+		api.nvim_buf_set_lines(buf, 0, count - max_lines, false, {})
 	end
 
 	vim.bo[buf].modifiable = false
 end
 
--- Scroll window to the last line only if cursor is near the bottom.
--- This lets users scroll up freely without being yanked back down.
+-- Scroll window to the last line only if the bottom of the buffer is already
+-- (nearly) in view. This is based on the window's viewport, not the cursor, so
+-- it works even when focus is elsewhere and lets users scroll up freely without
+-- being yanked back down.
 local AUTOSCROLL_THRESHOLD = 10
 
 function M.scroll_to_bottom(win)
@@ -114,20 +122,12 @@ function M.scroll_to_bottom(win)
 	end
 	local buf = api.nvim_win_get_buf(win)
 	local total = api.nvim_buf_line_count(buf)
-	local cursor = api.nvim_win_get_cursor(win)[1]
-	if total - cursor <= AUTOSCROLL_THRESHOLD then
+	local botline = api.nvim_win_call(win, function()
+		return vim.fn.line("w$")
+	end)
+	if total - botline <= AUTOSCROLL_THRESHOLD then
 		api.nvim_win_set_cursor(win, { total, 0 })
 	end
-end
-
--- Force scroll to bottom regardless of cursor position (used by resume())
-function M.force_scroll_to_bottom(win)
-	if not api.nvim_win_is_valid(win) then
-		return
-	end
-	local buf = api.nvim_win_get_buf(win)
-	local total = api.nvim_buf_line_count(buf)
-	api.nvim_win_set_cursor(win, { total, 0 })
 end
 
 return M
